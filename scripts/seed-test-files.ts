@@ -4,6 +4,7 @@
 // It deliberately differs from the Riverside sample: different column names and order, "$" prices,
 // US-style purchase dates, different ticket-type codes, a parking add-on, and a scans file with its own headers.
 // Every PayPal ID is a REAL sandbox capture (test card), so the Run step can actually refund them.
+// 75 sales rows: 57 PayPal payments covering 70 tickets, plus a comp pass, a cash sale and 3 broken rows.
 //
 // Writes to test-files/:
 //   lakeshore_sales_export.csv, lakeshore_gate_scans.csv, lakeshore_ticket_terms.txt,
@@ -31,27 +32,39 @@ const PRICE: Record<string, number> = { "SUN-DAY": 7500, "WKND-GA": 18900, "WKND
 type Day = "Fri" | "Sat";
 type OrderSpec = { name: string; products: string[]; attended: Day[]; channel: string; resoldTo?: string; refundedFull?: boolean };
 
-const NAMES = [
+const SUNDAY_BUYERS = [
   "Olivia Grant", "Henry Walsh", "Mina Park", "Daniel Osei", "Laura Kowalski", "Victor Hugo Lima", "Esther Mbeki", "Liam O'Connor",
-  "Sakura Ito", "Pablo Ruiz", "Freya Nilsen", "Imran Qureshi", "Bianca Ferraro", "Tobias Klein", "Adaeze Obi", "Jonas Berg",
-  "Priscilla Tan", "Mohamed Saleh", "Ruth Abebe", "Caleb Turner", "Ingrid Holm", "Nadia Rahman", "Theo Laurent", "Keiko Sato",
+  "Grace Whitfield", "Arjun Mehta", "Chloe Dubois", "Marcus Reid", "Yuki Tanaka", "Sofia Marin", "Kwame Asante", "Hannah Fischer",
+  "Diego Alvarez", "Amara Nwosu", "Ethan Brooks", "Leila Haddad",
 ];
+const GA_BUYERS = [
+  "Sakura Ito", "Pablo Ruiz", "Freya Nilsen", "Imran Qureshi", "Bianca Ferraro", "Tobias Klein", "Adaeze Obi", "Jonas Berg",
+  "Priscilla Tan", "Mohamed Saleh", "Noah Bennett", "Isabel Costa", "Rohan Kapoor", "Maya Lindqvist", "Samuel Adeyemi", "Clara Novak",
+  "Felix Wagner", "Aisha Bello", "Lucas Moreau", "Zara Ahmed", "Oscar Lindgren", "Nina Petrova", "Kofi Mensah", "Emily Chen", "Rafael Souza",
+];
+const VIP_BUYERS = ["Ruth Abebe", "Caleb Turner", "Ingrid Holm", "Nadia Rahman", "Julian Hayes", "Mei Lin Wong", "Andre Silva", "Fatima Zahra", "Patrick Doyle", "Elena Rossi"];
 
+// 57 PayPal payments → 70 ticket rows; plus 5 rows with no payment (below) = 75 rows in the export.
 const orders: OrderSpec[] = [
-  // 8 Sunday day tickets (one buyer bought two)
-  ...NAMES.slice(0, 8).map((name, i) => ({ name, products: i === 2 ? ["SUN-DAY", "SUN-DAY"] : ["SUN-DAY"], attended: [] as Day[], channel: "Web" })),
-  // 10 weekend GA passes, 3 with parking; 2 never came Fri or Sat
-  ...NAMES.slice(8, 18).map((name, i) => ({
+  // 20 Sunday day-ticket orders (two buyers bought two tickets) = 22 rows
+  ...SUNDAY_BUYERS.map((name, i) => ({ name, products: i === 2 || i === 11 ? ["SUN-DAY", "SUN-DAY"] : ["SUN-DAY"], attended: [] as Day[], channel: i % 5 === 3 ? "App" : "Web" })),
+  // 25 weekend GA passes, 9 with parking (= 34 rows); 4 never came Fri or Sat
+  ...GA_BUYERS.map((name, i) => ({
     name,
     products: i % 3 === 0 ? ["WKND-GA", "PARK-WKND"] : ["WKND-GA"],
-    attended: (i === 4 || i === 8 ? [] : i % 2 ? ["Fri", "Sat"] : ["Sat"]) as Day[],
+    attended: ([4, 8, 15, 21].includes(i) ? [] : i % 2 ? ["Fri", "Sat"] : ["Sat"]) as Day[],
     channel: i % 4 === 1 ? "App" : "Web",
   })),
-  // 4 VIP weekend passes; one never came
-  ...NAMES.slice(18, 22).map((name, i) => ({ name, products: ["WKND-VIP"], attended: (i === 3 ? [] : ["Fri", "Sat"]) as Day[], channel: "Web" })),
-  // Edge cases
-  { name: NAMES[22], products: ["WKND-GA"], attended: ["Sat"], channel: "App", resoldTo: "sam.rivera@example.com" },
-  { name: NAMES[23], products: ["SUN-DAY"], attended: [], channel: "Web", refundedFull: true },
+  // 10 VIP weekend passes, 2 with parking (= 12 rows); 2 never came
+  ...VIP_BUYERS.map((name, i) => ({
+    name,
+    products: i === 0 || i === 5 ? ["WKND-VIP", "PARK-WKND"] : ["WKND-VIP"],
+    attended: (i === 3 || i === 7 ? [] : ["Fri", "Sat"]) as Day[],
+    channel: i % 3 === 2 ? "App" : "Web",
+  })),
+  // Edge cases (2 rows)
+  { name: "Theo Laurent", products: ["WKND-GA"], attended: ["Sat"], channel: "App", resoldTo: "sam.rivera@example.com" },
+  { name: "Keiko Sato", products: ["SUN-DAY"], attended: [], channel: "Web", refundedFull: true },
 ];
 
 const email = (name: string) =>
@@ -117,7 +130,7 @@ async function worker() {
     process.stdout.write(".");
   }
 }
-await Promise.all([worker(), worker(), worker()]);
+await Promise.all([worker(), worker(), worker(), worker()]);
 console.log(" done");
 
 // No PayPal payment: a complimentary artist guest pass and a gate cash sale.

@@ -77,15 +77,25 @@ export async function generateJson<T>(opts: {
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-/** JSON call against a raw JSON schema we didn't write (e.g. AG Grid's own state schema). */
-export async function generateJsonFromSchema(system: string, prompt: string, jsonSchema: Record<string, unknown>): Promise<unknown> {
+/**
+ * JSON call against a raw JSON schema we didn't write (e.g. AG Grid's own state schema).
+ * Interactive callers pass short timeouts: a person is watching, so fail fast rather than wait 45s per model.
+ */
+export async function generateJsonFromSchema(
+  system: string, prompt: string, jsonSchema: Record<string, unknown>,
+  opts: { perModelMs?: number; totalMs?: number } = {},
+): Promise<unknown> {
+  const perModel = opts.perModelMs ?? CALL_TIMEOUT_MS;
+  const deadline = Date.now() + (opts.totalMs ?? Infinity);
   let lastError: unknown;
   for (const model of FAST_MODELS) {
+    const left = deadline - Date.now();
+    if (left < 2_000) break;
     try {
       const res = await ai().models.generateContent({
         model,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: { systemInstruction: system, temperature: 0, responseMimeType: "application/json", responseJsonSchema: jsonSchema, abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS) },
+        config: { systemInstruction: system, temperature: 0, responseMimeType: "application/json", responseJsonSchema: jsonSchema, abortSignal: AbortSignal.timeout(Math.min(perModel, left)), httpOptions: { timeout: Math.min(perModel, left) } },
       });
       return JSON.parse(res.text ?? "{}");
     } catch (err) {

@@ -17,7 +17,7 @@ function Buttons() {
       </button>
       <button name="intent" value="sample" className={btn.secondary} disabled={pending}>
         <IconSparkle className="text-ai" />
-        {pending && intent === "sample" ? <span className="ro-pulse">Loading the sample festival…</span> : "Try with sample festival data"}
+        {pending && intent === "sample" ? <span className="ro-pulse">Making fresh sandbox payments for your demo (about 15s)…</span> : "Try with sample festival data"}
       </button>
     </div>
   );

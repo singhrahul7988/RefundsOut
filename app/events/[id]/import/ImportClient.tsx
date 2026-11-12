@@ -53,7 +53,7 @@ export function ImportClient({ eventId, state }: { eventId: string; state: Impor
   const onScans = (f: File) => run("Matching scans to tickets…", async () => { must(await uploadScansAction(eventId, f.name, await readFile(f))); });
   const onTerms = (f: File) => run("Saving the terms…", async () => { must(await uploadTextAction(eventId, "terms", f.name, await readFile(f))); });
   const saveNotice = () => run("Saving the notice…", async () => { must(await uploadTextAction(eventId, "notice", noticeFile ?? "cancellation_notice.txt", noticeText)); });
-  const useSample = () => run("Loading the Riverside sample files. Gemini is reading the columns…", async () => {
+  const useSample = () => run("Making fresh sandbox payments for this demo, then Gemini reads the columns (about 20s)…",async () => {
     const data = must(await loadSampleFilesAction(eventId));
     setMapping(data!.staged.mapping);
     must(await uploadScansAction(eventId, "gate_scans_fri_sun.csv", data!.scansText));

@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AgGridReact } from "ag-grid-react";
-import type { CellValueChangedEvent, ColDef, GetRowIdParams, GridApi, ICellRendererParams, RowClassParams } from "ag-grid-community";
-import { setupGrid, gridTheme, money } from "@/ui/grid";
+import type { CellValueChangedEvent, ChartRef, ColDef, ExcelRow, GetRowIdParams, GridApi, GridState, ICellRendererParams, RowClassParams } from "ag-grid-community";
+import { setupGrid, gridTheme, money, statusBar, excelStyles, customChartThemes, CHART_THEME, describeGridState, type StateChip } from "@/ui/grid";
 import { TopBar, PageHeader, btn, Card, Chip, CheckRow, SegmentMeter, IconTile } from "@/ui/kit";
 import { IconLock, IconSparkle, IconRun, IconCheckCircle } from "@/ui/icons";
 import { field } from "@/ui/form";
@@ -13,6 +13,7 @@ import type { PlanLine } from "@/plan/build";
 import type { DemoUser } from "@/server/user";
 import { approvePlanAction, askGridAction, overrideAmountAction, resolveExceptionAction, startRunAction } from "../../../actions";
 import { BuildPlanButton } from "./BuildPlanButton";
+import { RulesToolPanel, type RuleBucket, type RulesToolPanelParams } from "./RulesToolPanel";
 
 export type ReviewRow = {
   id: string; group: string; buyer: string; email: string; tickets: string; captureId: string;
@@ -24,6 +25,27 @@ export type ReviewRow = {
 const EXCEPTION_LABEL: Record<string, string> = {
   possible_duplicate: "Possible duplicate", not_paypal: "Not paid with PayPal", no_rule: "No rule matches", too_old: "Older than 180 days",
   paypal_not_found: "PayPal can't find it", already_refunded: "Already refunded", offer_pending: "Offer already sent", free_ticket: "Free ticket", chargeback: "Charged back", nothing_due: "Nothing due",
+};
+
+const ROUTE_LABEL: Record<ReviewRow["route"], string> = { refund: "Refund", dispute_offer: "Dispute offer", skip: "Skipped", exception: "Needs a decision" };
+const MONEY_COLS = new Set(["paid", "refunded", "refund", "policyAmount"]);
+const HIDDEN_UNLESS_ASKED: Record<string, RegExp> = {
+  group: /(?!)/, email: /e-?mail/i, captureId: /payment id|capture|paypal id|transaction/i, tickets: /ticket/i,
+  refunded: /already|before|previous|earlier|partly|partial/i, policyAmount: /policy/i, reason: /reason|why/i, note: /note|edit|decision/i,
+};
+const ASK_EXAMPLES = ["Refunds over $100, biggest first", "Group by ticket type", "Only dispute offers, show emails"];
+/** Stored answers for the example questions, used only when Gemini is unavailable (the UI labels them as saved). */
+const SAVED_ANSWERS: Record<string, GridState> = {
+  [ASK_EXAMPLES[0]]: { filter: { filterModel: { refund: { filterType: "number", type: "greaterThan", filter: 100 } } }, sort: { sortModel: [{ colId: "refund", sort: "desc" }] } },
+  [ASK_EXAMPLES[1]]: { rowGroup: { groupColIds: ["tickets"] } },
+  [ASK_EXAMPLES[2]]: {
+    filter: { filterModel: { route: { filterType: "set", values: ["dispute_offer"] } } },
+    columnVisibility: { hiddenColIds: ["group", "tickets", "captureId", "refunded", "policyAmount", "reason", "note"] },
+  },
+};
+const CHIP_TONE: Record<StateChip["kind"], string> = {
+  Filter: "bg-ai-soft text-ai-ink", Sort: "bg-[#E8F0FA] text-[#1F4E86]", Group: "bg-accent-soft text-accent-ink",
+  Pivot: "bg-accent-soft text-accent-ink", Total: "bg-warn-soft text-warn-ink", Columns: "bg-[#F1F3F6] text-[#3E4652]",
 };
 
 type Dialog =
@@ -44,13 +66,21 @@ export function ReviewClient(props: {
   const [error, setError] = useState<string | null>(null);
   const [ask, setAsk] = useState("");
   const [askState, setAskState] = useState<"idle" | "busy" | "done">("idle");
+  const [applied, setApplied] = useState<StateChip[]>([]);
+  const [fromSaved, setFromSaved] = useState(false);
+  // The grid's own starting view (rule grouping, hidden columns), captured once it is ready. Reset returns here.
+  const baseState = useRef<GridState>({});
+  const [chartOpen, setChartOpen] = useState(true);
+  const [gridReady, setGridReady] = useState(false);
+  const chartBox = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<ChartRef | undefined>(undefined);
   const [pending, start] = useTransition();
 
   const locked = !["draft", "approved"].includes(props.planStatus);
   const finished = ["done", "stopped"].includes(props.planStatus);
   const inFlight = ["running", "paused"].includes(props.planStatus);
-  const pinned = props.rows.filter((r) => r.route === "exception");
-  const grouped = props.rows.filter((r) => r.route !== "exception");
+  const pinned = useMemo(() => props.rows.filter((r) => r.route === "exception"), [props.rows]);
+  const grouped = useMemo(() => props.rows.filter((r) => r.route !== "exception"), [props.rows]);
   const passing = props.gates.filter((g) => g.passed).length;
   const allPass = passing === props.gates.length;
 
@@ -68,9 +98,9 @@ export function ReviewClient(props: {
   }, [props.rows]);
 
   const columnDefs = useMemo<ColDef<ReviewRow>[]>(() => [
-    { field: "group", rowGroup: true, hide: true },
+    { headerName: "Rule", field: "group", rowGroup: true, hide: true, enableRowGroup: true, enablePivot: true, filter: "agSetColumnFilter" },
     {
-      headerName: "Buyer", field: "buyer", minWidth: 170, flex: 1.3, tooltipField: "email",
+      headerName: "Buyer", field: "buyer", filter: "agTextColumnFilter", minWidth: 170, flex: 1.3, tooltipField: "email",
       cellRenderer: (p: ICellRendererParams<ReviewRow>) =>
         p.data ? (
           <div className="flex flex-col justify-center leading-[18px]">
@@ -79,13 +109,13 @@ export function ReviewClient(props: {
           </div>
         ) : null,
     },
-    { headerName: "Email", field: "email", hide: true },
-    { headerName: "Tickets", field: "tickets", hide: true },
-    { headerName: "Payment ID", field: "captureId", hide: true },
-    { headerName: "Paid", field: "paid", type: "rightAligned", aggFunc: "sum", valueFormatter: (p) => money(p.value), width: 108, minWidth: 96 },
-    { headerName: "Already refunded", field: "refunded", type: "rightAligned", aggFunc: "sum", valueFormatter: (p) => money(p.value), hide: true },
+    { headerName: "Email", field: "email", filter: "agTextColumnFilter", hide: true },
+    { headerName: "Tickets", field: "tickets", hide: true, enableRowGroup: true, enablePivot: true },
+    { headerName: "Payment ID", field: "captureId", filter: "agTextColumnFilter", hide: true },
+    { headerName: "Paid", field: "paid", type: "rightAligned", aggFunc: "sum", valueFormatter: (p) => money(p.value), width: 108, minWidth: 96, filter: "agNumberColumnFilter", enableValue: true, cellClass: "money", useValueFormatterForExport: false },
+    { headerName: "Already refunded", field: "refunded", type: "rightAligned", aggFunc: "sum", valueFormatter: (p) => money(p.value), hide: true, filter: "agNumberColumnFilter", enableValue: true, cellClass: "money", useValueFormatterForExport: false },
     {
-      headerName: "Refund", field: "refund", type: "rightAligned", aggFunc: "sum", width: 124, minWidth: 110,
+      headerName: "Refund", field: "refund", type: "rightAligned", aggFunc: "sum", width: 124, minWidth: 110, filter: "agNumberColumnFilter", enableValue: true, cellClass: "money", useValueFormatterForExport: false,
       editable: (p) => !locked && p.data?.route === "refund",
       valueParser: (p) => Number(String(p.newValue).replace(/[$,]/g, "")),
       cellClassRules: { "ro-edited": (p) => !!p.data?.overridden },
@@ -95,7 +125,7 @@ export function ReviewClient(props: {
         ) : <b>{money(p.value)}</b>,
     },
     {
-      headerName: "Route", field: "route", minWidth: 150, flex: 1,
+      headerName: "Route", field: "route", minWidth: 150, flex: 1, enableRowGroup: true, enablePivot: true,
       cellRenderer: (p: ICellRendererParams<ReviewRow>) => {
         const r = p.data;
         if (!r) return null;
@@ -115,6 +145,10 @@ export function ReviewClient(props: {
         );
       },
     },
+    // Export-only columns: hidden on screen (the Why panel shows them), but the Excel audit file needs them.
+    { headerName: "Policy amount", field: "policyAmount", hide: true, type: "rightAligned", valueFormatter: (p) => money(p.value), filter: "agNumberColumnFilter", enableValue: true, cellClass: "money", useValueFormatterForExport: false },
+    { headerName: "Reason", field: "reason", hide: true },
+    { headerName: "Edit / decision note", colId: "note", valueGetter: (p) => p.data?.overrideReason ?? p.data?.resolution ?? "", hide: true },
   ], [locked]);
 
   const autoGroupColumnDef = useMemo<ColDef<ReviewRow>>(() => ({
@@ -129,6 +163,35 @@ export function ReviewClient(props: {
         : { component: "agGroupCellRenderer", params: { suppressCount: false } },
   }), []);
   const getRowId = useCallback((p: GetRowIdParams<ReviewRow>) => p.data.id, []);
+
+  // Side bar: our custom "Policy rules" tool panel first, then AG Grid's own Columns and Filters panels.
+  const sideBar = useMemo(() => {
+    const byGroup = new Map<string, { count: number; total: number }>();
+    for (const r of grouped) {
+      const b = byGroup.get(r.group) ?? { count: 0, total: 0 };
+      byGroup.set(r.group, { count: b.count + 1, total: b.total + r.refund });
+    }
+    const buckets: RuleBucket[] = [...byGroup].map(([key, v]) => {
+      const id = /^(R\d+)\s·/.exec(key)?.[1];
+      const info = id ? props.ruleInfo[id] : undefined;
+      return id
+        ? { key, id, title: info?.title ?? key, clause: info?.clause, quote: info?.quote, ...v, tone: "rule" as const }
+        : { key, id: /^Dispute/.test(key) ? "Offers" : /^Skipped/.test(key) ? "Skipped" : "Other", title: key.replace(/^[^·]*·\s*/, ""), ...v, tone: /^Dispute/.test(key) ? ("offer" as const) : ("skip" as const) };
+    }).sort((a, b) => {
+      const rank = (x: RuleBucket) => (x.tone === "rule" ? Number(x.id.slice(1)) : x.tone === "offer" ? 900 : 1000);
+      return rank(a) - rank(b);
+    });
+    const deductions = Object.entries(props.ruleInfo).filter(([id]) => !/^R\d+$/.test(id)).map(([id, d]) => ({ id, title: d.title, clause: d.clause }));
+    const params: RulesToolPanelParams = { buckets, deductions };
+    return {
+      toolPanels: [
+        { id: "rules", labelDefault: "Policy rules", labelKey: "rules", iconKey: "filtersToolPanel", toolPanel: RulesToolPanel, toolPanelParams: params, width: 270, minWidth: 240 },
+        { id: "columns", labelDefault: "Columns", labelKey: "columns", iconKey: "columns", toolPanel: "agColumnsToolPanel", toolPanelParams: { suppressPivotMode: false } },
+        { id: "filters", labelDefault: "Filters", labelKey: "filters", iconKey: "filter", toolPanel: "agFiltersToolPanel" },
+      ],
+    };
+  }, [grouped, props.ruleInfo]);
+
 
   const onCellValueChanged = (e: CellValueChangedEvent<ReviewRow>) => {
     if (e.colDef.field !== "refund" || !e.data) return;
@@ -152,24 +215,103 @@ export function ReviewClient(props: {
       router.refresh();
     });
 
-  const runAsk = async () => {
+  const runAsk = async (question = ask) => {
     const api = gridRef.current?.api as GridApi | undefined;
-    if (!api || !ask.trim()) return;
+    if (!api || !question.trim()) return;
+    setAsk(question);
     setAskState("busy");
     setError(null);
-    const schema = api.getStructuredSchema({
+    // The toolkit's schema holds objects with toJSON(); Server Actions only accept plain objects, so round-trip it through JSON.
+    const schema = JSON.parse(JSON.stringify(api.getStructuredSchema({
       columns: {
         group: { description: "Refund rule or route the row falls under", includeSetValues: true },
         tickets: { description: "Ticket types in the payment, e.g. '3-Day Pass + Camping add-on'" },
         refund: { description: "Refund amount in US dollars" },
         paid: { description: "Amount the buyer paid in US dollars" },
         route: { description: "refund, dispute_offer, skip or exception", includeSetValues: true },
+        email: { description: "Buyer email. Hidden by default; show only if asked" },
+        captureId: { description: "PayPal capture (payment) ID. Hidden by default; show only if asked" },
+        refunded: { description: "Amount already refunded before this plan, in US dollars. Hidden by default" },
+      },
+    })));
+    // A failed request (network, server restart) must not leave the button stuck on "Thinking…".
+    const res = await askGridAction(question, schema, "buyer, email, tickets, captureId, paid, refunded, refund, route, group")
+      .catch((): { ok: false; error: string } => ({ ok: false, error: "Couldn't reach the server. Try again in a moment." }));
+    const saved = SAVED_ANSWERS[question];
+    if (!res.ok && !saved) { setAskState("idle"); return setError(`Ask the grid: ${res.error}`); }
+    // If Gemini is down, the example questions still work from a stored answer, and the page says so.
+    setFromSaved(!res.ok);
+    const state = (res.ok ? res.data : structuredClone(saved)) as GridState;
+    tidyFilters(state, question);
+    // Small models tend to return every column as visible. Keep the default-hidden ones hidden unless the question names them.
+    if (state.columnVisibility) {
+      const hidden = new Set(state.columnVisibility.hiddenColIds ?? []);
+      for (const [col, re] of Object.entries(HIDDEN_UNLESS_ASKED)) if (!re.test(question)) hidden.add(col);
+      hidden.delete("buyer"); hidden.delete("refund"); hidden.delete("route");
+      state.columnVisibility = { hiddenColIds: [...hidden] };
+    }
+    // Layer the answer over the grid's starting view, so anything the AI leaves out (e.g. the rule grouping) stays as it was.
+    api.setState({ ...baseState.current, ...state });
+    // Show what the AI changed, in words, so nobody has to trust it blindly.
+    const nameOf = (id: string) => (id === "ag-Grid-AutoColumn" ? "Rule" : api.getColumn(id)?.getColDef().headerName ?? id);
+    setApplied(describeGridState(state, nameOf, (id) => MONEY_COLS.has(id))
+      .filter((c) => !(c.kind === "Group" && c.text === "Rule"))
+      // "Route is dispute_offer" → "Route is Dispute offer"
+      .map((c) => (c.text.startsWith("Route ") ? { ...c, text: c.text.replace(/\b(dispute_offer|refund|skip|exception)\b/g, (v) => ROUTE_LABEL[v as ReviewRow["route"]]) } : c)));
+    setAskState("done");
+  };
+
+  const resetAsk = () => {
+    const api = gridRef.current?.api;
+    api?.setState(baseState.current);
+    api?.setFilterModel(null);
+    setFromSaved(false);
+    setAskState("idle");
+    setAsk("");
+    setApplied([]);
+  };
+
+  // Integrated cross-filter chart: refund dollars by rule. Clicking a slice filters the grid to that rule.
+  useEffect(() => {
+    const api = gridRef.current?.api;
+    if (!gridReady || !api || !chartOpen || !chartBox.current || chartRef.current) return;
+    chartRef.current = api.createCrossFilterChart({
+      chartType: "donut",
+      cellRange: { columns: ["group", "refund"] },
+      aggFunc: "sum",
+      chartContainer: chartBox.current,
+      chartThemeName: CHART_THEME,
+      chartThemeOverrides: {
+        common: { title: { enabled: false } },
+        donut: { series: { title: { enabled: false } } },
       },
     });
-    const res = await askGridAction(ask, schema, "buyer, email, tickets, paid, refunded, refund, route, group");
-    if (!res.ok) { setAskState("idle"); return setError(`Ask the grid: ${res.error}`); }
-    api.setState(res.data as Parameters<GridApi["setState"]>[0]);
-    setAskState("done");
+    return () => { chartRef.current?.destroyChart(); chartRef.current = undefined; };
+  }, [gridReady, chartOpen]);
+
+  const exportExcel = () => {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    const cell = (value: string | number, styleId?: string) => ({ data: { value: String(value), type: typeof value === "number" ? ("Number" as const) : ("String" as const) }, styleId });
+    const header: ExcelRow[] = [
+      { cells: [cell(`RefundsOut · refund plan · ${props.eventName}`, "title")] },
+      { cells: [cell("Exported", "label"), cell(`${new Date().toLocaleString("en-US")} by ${props.user.name}`)] },
+      { cells: [cell("Plan status", "label"), cell(props.planStatus)] },
+      { cells: [cell("Total to refund", "label"), { ...cell(props.totalCents / 100, "money") }, cell(`of ${money(props.budgetCents / 100)} budget`, "muted")] },
+      { cells: [cell("Checks", "label"), cell(`${passing} of ${props.gates.length} passing`, allPass ? "pass" : "fail")] },
+      ...props.gates.map((g) => ({ cells: [cell(""), cell(g.passed ? "✓ " + g.label : "✗ " + g.label, g.passed ? "pass" : "fail"), cell(g.detail, "muted")] })),
+      { cells: [cell("Approvals", "label"), cell(props.approvals.length ? props.approvals.map((a) => `${a.userName} (${a.role})`).join(", ") : "None yet")] },
+      { cells: [] },
+    ];
+    api.exportDataAsExcel({
+      fileName: `refundsout-${props.eventName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-plan.xlsx`,
+      sheetName: "Refund plan",
+      author: "RefundsOut",
+      prependContent: header,
+      rowGroupExpandState: "expanded",
+      columnKeys: ["ag-Grid-AutoColumn", "buyer", "email", "tickets", "captureId", "paid", "refunded", "policyAmount", "refund", "route", "reason", "note"],
+      processCellCallback: (p) => (p.column.getColId() === "route" && p.value ? ROUTE_LABEL[p.value as ReviewRow["route"]] ?? p.value : p.value),
+    });
   };
 
   const operatorApproval = props.approvals.find((a) => a.role === "operator");
@@ -210,7 +352,7 @@ export function ReviewClient(props: {
           <>
             {!locked && <BuildPlanButton eventId={props.eventId} label="Re-check with PayPal" variant="secondary" />}
             {finished && <BuildPlanButton eventId={props.eventId} label="Start a new plan" variant="secondary" />}
-            <button className={btn.secondary} onClick={() => gridRef.current?.api.exportDataAsExcel({ fileName: "refundsout-plan.xlsx" })}>Export to Excel</button>
+            <button className={btn.secondary} onClick={exportExcel}>Export to Excel</button>
             {canApprove && (
               <button className={btn.secondary} disabled={pending || !otherGatesPass} onClick={doApprove}
                 title={otherGatesPass ? undefined : "Clear the other checks first"}>
@@ -286,15 +428,49 @@ export function ReviewClient(props: {
               <div className="flex gap-2">
                 <input id="ask" value={ask} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runAsk()}
                   placeholder="e.g. only refunds over $100, biggest first" className={field({ size: "md", tone: "ai" }) + " flex-1"} />
-                <button className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-ai px-3 font-semibold text-white disabled:opacity-60" disabled={askState === "busy"} onClick={runAsk}>
+                <button className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-ai px-3 font-semibold text-white disabled:opacity-60" disabled={askState === "busy"} onClick={() => runAsk()}>
                   <IconSparkle />{askState === "busy" ? "Thinking…" : "Ask"}
                 </button>
                 {askState === "done" && (
-                  <button className={btn.small + " h-10"} onClick={() => { gridRef.current?.api.setState({}); gridRef.current?.api.setFilterModel(null); setAskState("idle"); setAsk(""); }}>Reset</button>
+                  <button className={btn.small + " h-10"} onClick={resetAsk}>Reset</button>
                 )}
               </div>
             </div>
+            <button className={btn.small + " h-10"} aria-pressed={chartOpen} onClick={() => setChartOpen((o) => !o)}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden><circle cx="10" cy="10" r="7" /><path d="M10 3 V10 L15 15" /></svg>
+              {chartOpen ? "Hide chart" : "Chart"}
+            </button>
+            <div className="flex basis-full flex-wrap items-center gap-1.5 text-xs" aria-live="polite">
+              {askState === "done" && applied.length > 0 ? (
+                <>
+                  <span className="font-semibold text-ai">{fromSaved ? "Saved answer applied" : "AI applied"}</span>
+                  {applied.map((c, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${CHIP_TONE[c.kind]}`}><b className="font-semibold">{c.kind}</b>{c.text}</span>
+                  ))}
+                  {fromSaved && <span className="text-muted">· Gemini is busy, so this example used its stored answer</span>}
+                </>
+              ) : askState === "done" ? (
+                <span className="text-muted">The AI returned the grid&apos;s default view for that question.</span>
+              ) : (
+                <>
+                  <span className="text-muted">Try</span>
+                  {ASK_EXAMPLES.map((q) => (
+                    <button key={q} disabled={askState === "busy"} onClick={() => runAsk(q)}
+                      className="rounded-full border border-[#DCD6F2] bg-white px-2.5 py-1 text-ai-ink hover:bg-ai-soft disabled:opacity-60">{q}</button>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
+          {chartOpen && (
+            <div className="flex flex-col border-b border-[#E6E9EE]">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-3">
+                <b className="text-[13px]">Refund dollars by rule</b>
+                <span className="text-xs text-muted">AG Grid integrated chart · click a slice to filter the grid to that rule</span>
+              </div>
+              <div ref={chartBox} className="h-[240px] px-2" />
+            </div>
+          )}
           <div style={{ height: 620 }}>
             <AgGridReact<ReviewRow>
               ref={gridRef}
@@ -313,8 +489,24 @@ export function ReviewClient(props: {
                 return rank(nodeA.key) - rank(nodeB.key) || String(nodeA.key).localeCompare(String(nodeB.key));
               }}
               isGroupOpenByDefault={(p) => p.rowNode.allLeafChildren?.some((n) => n.data?.id === selected?.id) ?? false}
-              defaultColDef={{ enableCellChangeFlash: true, sortable: true, filter: true }}
+              defaultColDef={{ enableCellChangeFlash: true, sortable: true, filter: true, headerClass: "header" }}
               cellSelection
+              enableCharts
+              chartThemes={[CHART_THEME, "ag-default"]}
+              customChartThemes={customChartThemes}
+              statusBar={statusBar}
+              excelStyles={excelStyles}
+              onGridReady={(e) => {
+                // Keep only the view parts; panel, scroll and focus are the user's own and must not jump on Ask/Reset.
+                const { sideBar: _s, scroll: _sc, focusedCell: _f, cellSelection: _c, rangeSelection: _r, rowSelection: _rs, ...view } = e.api.getState();
+                baseState.current = view;
+                setGridReady(true);
+              }}
+              sideBar={sideBar}
+              masterDetail
+              isRowMaster={isPaymentMaster}
+              detailCellRenderer={TicketDetail}
+              detailRowAutoHeight
               stopEditingWhenCellsLoseFocus
               onCellValueChanged={onCellValueChanged}
               onRowClicked={(e) => e.data && setSelected(e.data)}
@@ -349,6 +541,67 @@ export function ReviewClient(props: {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Small models pad the filter model with no-op or broken conditions on every column ("is not blank", "≥ $0",
+ * an empty set filter that hides every row, duplicates). Drop those so the grid shows what was asked and the
+ * "AI applied" chips stay readable.
+ */
+type Cond = { filterType?: string; type?: string; filter?: unknown; values?: unknown[]; conditions?: Cond[] };
+function tidyFilters(state: GridState, question: string) {
+  const fm = state.filter?.filterModel as Record<string, Cond | null> | undefined;
+  if (!fm) return;
+  const asksBlank = /blank|empty|missing/i.test(question);
+  const noise = (c?: Cond | null) =>
+    !c ||
+    (!asksBlank && (c.type === "notBlank" || c.type === "blank")) ||
+    (c.filterType === "set" && !(c.values ?? []).length) ||
+    (c.filterType === "number" && c.type !== "blank" && c.type !== "notBlank" && c.type !== "inRange" && (c.filter === null || c.filter === undefined)) ||
+    (c.filterType === "number" && ["greaterThanOrEqual", "greaterThan"].includes(c.type ?? "") && Number(c.filter) <= 0 && !(c.type === "greaterThan" && Number(c.filter) === 0)) ||
+    (c.filterType === "text" && c.type !== "blank" && c.type !== "notBlank" && !String(c.filter ?? "").trim());
+  for (const [col, f] of Object.entries(fm)) {
+    if (f?.conditions) {
+      const seen = new Set<string>();
+      const kept = f.conditions.filter((c) => !noise({ filterType: f.filterType, ...c }) && !seen.has(JSON.stringify(c)) && !!seen.add(JSON.stringify(c)));
+      if (!kept.length) delete fm[col];
+      else if (kept.length === 1) fm[col] = { filterType: f.filterType, ...kept[0] };
+      else f.conditions = kept;
+    } else if (noise(f)) delete fm[col];
+  }
+}
+
+/** Stable function (not an inline arrow) so re-renders do not make AG Grid re-check master rows and collapse them. */
+const isPaymentMaster = (d: ReviewRow | undefined) => !!d && d.lines.length > 0;
+
+/** Master-detail row: the per-ticket math behind one payment's refund. */
+function TicketDetail({ data }: ICellRendererParams<ReviewRow>) {
+  if (!data) return null;
+  return (
+    <div className="bg-[#FAFBFC] px-4 py-3 pl-12">
+      <table className="w-full border-collapse text-[12.5px]">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-[0.4px] text-muted">
+            <th className="pb-1.5 pr-3 font-semibold">Ticket</th><th className="pb-1.5 pr-3 font-semibold">Scanned</th><th className="pb-1.5 pr-3 font-semibold">How</th>
+            <th className="pb-1.5 pr-3 text-right font-semibold">Price</th><th className="pb-1.5 text-right font-semibold">Refund</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.lines.map((l) => (
+            <tr key={l.ticketId} className="border-t border-[#EEF0F3] align-top">
+              <td className="py-1.5 pr-3 font-medium">{l.tier}</td>
+              <td className="whitespace-nowrap py-1.5 pr-3 text-muted">{l.attendedDays.length ? l.attendedDays.join(", ") : "No scans"}</td>
+              <td className="py-1.5 pr-3 text-[#3E4652]">
+                {l.result.kind === "refund" ? <><b className="text-accent-ink">{l.result.ruleId}</b> {formulaOf(l.result.explanation)}</> : l.result.reason}
+              </td>
+              <td className="py-1.5 pr-3 text-right text-muted">{money(l.priceCents / 100)}</td>
+              <td className="py-1.5 text-right font-semibold">{money(l.result.amountCents / 100)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

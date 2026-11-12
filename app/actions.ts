@@ -1,7 +1,5 @@
 "use server";
 
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -16,6 +14,7 @@ import { overrideAmount, resolveException, resolveQuarantined, approvePlan } fro
 import { startRun, pauseRun, resumeRun, stopRun, runStatus } from "@/run/runner";
 import { generateJsonFromSchema } from "@/ai/gemini";
 import { toCents } from "@/lib/money";
+import { freshSampleSales, readSampleFiles } from "@/sample/freshSample";
 
 export type ActionResult<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -63,10 +62,9 @@ export async function createEventAction(formData: FormData) {
 }
 
 async function loadSampleFiles(eventId: string, actor: string) {
-  const dir = path.join(process.cwd(), "data", "sample");
-  const [sales, scans, terms, notice] = await Promise.all(
-    ["sales.csv", "scans.csv", "terms.txt", "notice.txt"].map((f) => readFile(path.join(dir, f), "utf8")),
-  );
+  const { scans, terms, notice, ...bundled } = await readSampleFiles();
+  // Fresh sandbox payments per sample run, so every judge can take the run all the way to real refunds.
+  const sales = await freshSampleSales(eventId, actor, bundled.sales, bundled.orders);
   await saveTextDocument(eventId, "terms", "Riverside_Ticket_Terms_2026.txt", terms, actor);
   await saveTextDocument(eventId, "notice", "cancellation_notice.txt", notice, actor);
   const staged = await stageSalesFile(eventId, "sales_export_final_v2.csv", sales);
@@ -95,12 +93,10 @@ export async function uploadTextAction(eventId: string, kind: "terms" | "notice"
 
 /** Loads the bundled Riverside sample files so judges can try the flow without their own data. */
 export async function loadSampleFilesAction(eventId: string) {
-  const dir = path.join(process.cwd(), "data", "sample");
-  const [sales, scans, terms, notice] = await Promise.all(
-    ["sales.csv", "scans.csv", "terms.txt", "notice.txt"].map((f) => readFile(path.join(dir, f), "utf8")),
-  );
   const user = await currentUser();
   return attempt(async () => {
+    const { scans, terms, notice, ...bundled } = await readSampleFiles();
+    const sales = await freshSampleSales(eventId, user.name, bundled.sales, bundled.orders);
     await saveTextDocument(eventId, "terms", "Riverside_Ticket_Terms_2026.txt", terms, user.name);
     await saveTextDocument(eventId, "notice", "cancellation_notice.txt", notice, user.name);
     const staged = await stageSalesFile(eventId, "sales_export_final_v2.csv", sales);
@@ -158,15 +154,22 @@ export async function approvePlanAction(eventId: string, planId: string) {
 }
 
 /** "Ask the grid": AG Grid describes its state as a JSON schema; Gemini fills it from a plain-English question. */
-export async function askGridAction(question: string, schema: Record<string, unknown>, columns: string) {
-  return attempt(() =>
+export async function askGridAction(question: string, schema: Record<string, unknown>, columns: string): Promise<ActionResult<unknown>> {
+  const res = await attempt(() =>
     generateJsonFromSchema(
       `You control an AG Grid of refund rows by returning grid state (filters, sort, row grouping, column visibility) that answers the user's request.
-Only use columns that exist. Columns: ${columns}. Money columns are in dollars. Return the full state object.`,
+Only use columns that exist. Columns: ${columns}. Money columns are in dollars. Return the full state object.
+Keep row grouping on "group" unless the user asks to group or total by something else. For "total/sum/count by X" questions, group rows by X.
+Only show extra columns (email, tickets, captureId, refunded) when the user asks for them.`,
       question,
       schema,
+      { perModelMs: 12_000, totalMs: 25_000 },
     ),
   );
+  if (res.ok) return res;
+  // Gemini errors arrive as raw JSON ({"error":{"code":503,...}}); say it plainly instead.
+  const busy = /503|504|429|UNAVAILABLE|DEADLINE|RESOURCE_EXHAUSTED|overloaded|high demand|timed? ?out|abort/i.test(res.error);
+  return { ok: false, error: busy ? "Gemini is busy right now. Try again in a moment." : "Gemini couldn't answer that one. Try rephrasing it." };
 }
 
 // ---------- Run ----------

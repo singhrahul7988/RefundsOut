@@ -1,6 +1,7 @@
 import { pool } from "@/db/client";
 import { getEvent } from "@/server/events";
-import { TopBar, PageHeader, Card } from "@/ui/kit";
+import { TopBar, PageHeader } from "@/ui/kit";
+import { AuditGrid, type AuditRow } from "./AuditGrid";
 
 export const dynamic = "force-dynamic";
 
@@ -18,25 +19,12 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
       order by a.at desc limit 300`,
     [id],
   );
+  const auditRows: AuditRow[] = rows.map((r) => ({ at: new Date(r.at).toISOString(), actor: r.actor, action: r.action, entity: r.entity, entityId: String(r.entity_id), after: r.after ?? null }));
   return (
     <>
       <TopBar eventName={event.name} page="Audit log" />
       <PageHeader title="Audit log" subtitle="Every decision and money call, in order. Entries can be added but never edited or deleted. The database itself enforces that." />
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse">
-          <thead><tr className="bg-[#F3F5F8] text-left text-xs text-[#3E4652]"><th className="px-4 py-2.5 font-semibold">When</th><th className="px-3 py-2.5 font-semibold">Who</th><th className="px-3 py-2.5 font-semibold">What</th><th className="px-4 py-2.5 font-semibold">Details</th></tr></thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-t border-[#EEF0F3] align-top">
-                <td className="whitespace-nowrap px-4 py-2 text-muted">{new Date(r.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</td>
-                <td className="px-3 py-2">{r.actor}</td>
-                <td className="mono px-3 py-2 text-[13px]">{r.action}</td>
-                <td className="mono max-w-[520px] truncate px-4 py-2 text-xs text-muted" title={r.after ? JSON.stringify(r.after) : ""}>{r.after ? JSON.stringify(r.after) : ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      <AuditGrid rows={auditRows} licenseKey={process.env.AG_GRID_LICENSE_KEY} />
     </>
   );
 }
