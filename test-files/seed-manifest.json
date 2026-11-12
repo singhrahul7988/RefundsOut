@@ -1,0 +1,251 @@
+{
+  "createdAt": "2026-11-12T11:05:17.182Z",
+  "runTag": "mwdfxuun",
+  "orders": [
+    {
+      "booking": "LLF-B0003",
+      "name": "Mina Park",
+      "products": [
+        "SUN-DAY",
+        "SUN-DAY"
+      ],
+      "totalCents": 15000,
+      "captureId": "2T451647T4712114R",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0002",
+      "name": "Henry Walsh",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "55542974W0323654A",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0001",
+      "name": "Olivia Grant",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "4BN218630A521341B",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0005",
+      "name": "Laura Kowalski",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "9LH95505K4010290K",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0006",
+      "name": "Victor Hugo Lima",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "2R236367MP931420F",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0004",
+      "name": "Daniel Osei",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "98N408941V016025V",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0007",
+      "name": "Esther Mbeki",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "51G62243M38613840",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0008",
+      "name": "Liam O'Connor",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "3J397880WP878291H",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0009",
+      "name": "Sakura Ito",
+      "products": [
+        "WKND-GA",
+        "PARK-WKND"
+      ],
+      "totalCents": 23400,
+      "captureId": "7YD965094D2007639",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0010",
+      "name": "Pablo Ruiz",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "6CS923134V046005K",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0011",
+      "name": "Freya Nilsen",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "1L157680L32329449",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0012",
+      "name": "Imran Qureshi",
+      "products": [
+        "WKND-GA",
+        "PARK-WKND"
+      ],
+      "totalCents": 23400,
+      "captureId": "6KR86577FX6792303",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0013",
+      "name": "Bianca Ferraro",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "72028669YU673601N",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0014",
+      "name": "Tobias Klein",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "2CL759494L806474Y",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0015",
+      "name": "Adaeze Obi",
+      "products": [
+        "WKND-GA",
+        "PARK-WKND"
+      ],
+      "totalCents": 23400,
+      "captureId": "1F2270336F0862838",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0016",
+      "name": "Jonas Berg",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "3KU09277DE962682R",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0017",
+      "name": "Priscilla Tan",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "6XL6214971242343B",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0018",
+      "name": "Mohamed Saleh",
+      "products": [
+        "WKND-GA",
+        "PARK-WKND"
+      ],
+      "totalCents": 23400,
+      "captureId": "7GT693718L065715P",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0019",
+      "name": "Ruth Abebe",
+      "products": [
+        "WKND-VIP"
+      ],
+      "totalCents": 39900,
+      "captureId": "5DT23653ES4357215",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0020",
+      "name": "Caleb Turner",
+      "products": [
+        "WKND-VIP"
+      ],
+      "totalCents": 39900,
+      "captureId": "6CD232620F692320W",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0021",
+      "name": "Ingrid Holm",
+      "products": [
+        "WKND-VIP"
+      ],
+      "totalCents": 39900,
+      "captureId": "00G303582B514912P",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0022",
+      "name": "Nadia Rahman",
+      "products": [
+        "WKND-VIP"
+      ],
+      "totalCents": 39900,
+      "captureId": "00R699434P763232K",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0023",
+      "name": "Theo Laurent",
+      "products": [
+        "WKND-GA"
+      ],
+      "totalCents": 18900,
+      "captureId": "1ER570178Y5667503",
+      "refundedFull": false
+    },
+    {
+      "booking": "LLF-B0024",
+      "name": "Keiko Sato",
+      "products": [
+        "SUN-DAY"
+      ],
+      "totalCents": 7500,
+      "captureId": "70N211613X400501M",
+      "refundedFull": true
+    }
+  ]
+}

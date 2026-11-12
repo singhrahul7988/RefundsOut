@@ -1,0 +1,42 @@
+{
+  "name": "refundsout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RefundsOut: compile a cancellation refund policy, review every refund in AG Grid, and send them through PayPal exactly once.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:migrate": "tsx --env-file=.env scripts/migrate.ts",
+    "check:sandbox": "node --env-file=.env scripts/check-sandbox.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^3.0.0",
+    "ag-grid-community": "^36.3.0",
+    "ag-grid-enterprise": "^36.3.0",
+    "ag-grid-react": "^36.3.0",
+    "next": "^16.4.5",
+    "papaparse": "^5.7.0",
+    "pg": "^8.23.1",
+    "pg-boss": "^12.38.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/papaparse": "^5.5.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9",
+    "vitest": "^5.1.0"
+  }
+}
