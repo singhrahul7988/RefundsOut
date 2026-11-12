@@ -22,19 +22,18 @@ for approval before any money moves, and then sends each refund through PayPal e
 
 </div>
 
----
+## Table of contents
 
-**Contents:**
-[The problem](#the-problem) ·
-[What it does](#what-it-does) ·
-[Screenshots](#screenshots) ·
-[Never pays twice](#built-to-never-pay-twice) ·
-[AI](#how-ai-is-used-and-where-it-is-not) ·
-[PayPal](#paypal-apis-used) ·
-[AG Grid](#how-refundsout-uses-ag-grid) ·
-[Architecture](#architecture) ·
-[Setup](#getting-started) ·
-[Troubleshooting](#troubleshooting)
+1. [The problem](#the-problem)
+2. [What it does](#what-it-does)
+3. [Screenshots](#screenshots)
+4. [Built to never pay twice](#built-to-never-pay-twice)
+5. [How AI is used](#how-ai-is-used-and-where-it-is-not)
+6. [PayPal APIs used](#paypal-apis-used)
+7. [How RefundsOut uses AG Grid](#how-refundsout-uses-ag-grid)
+8. [Architecture](#architecture)
+9. [Getting started](#getting-started)
+10. [Troubleshooting](#troubleshooting)
 
 ## The problem
 
