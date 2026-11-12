@@ -194,9 +194,11 @@ export function ReviewClient(props: {
 
 
   const onCellValueChanged = (e: CellValueChangedEvent<ReviewRow>) => {
-    if (e.colDef.field !== "refund" || !e.data) return;
+    // Our own revert below fires this event again; ignoring it stops an endless revert → re-open loop (blinking cell + dialog).
+    if (e.source === "revert" || e.colDef.field !== "refund" || !e.data) return;
     const newValue = Number(e.newValue);
-    e.node.setDataValue("refund", e.oldValue); // keep the old value until the change is confirmed with a reason
+    if (newValue === Number(e.oldValue)) return; // nothing actually changed
+    e.node.setDataValue("refund", e.oldValue, "revert"); // keep the old value until the change is confirmed with a reason
     if (!Number.isFinite(newValue) || newValue < 0) return setError("Enter a positive amount");
     setNote("");
     setDialog({ kind: "override", row: e.data, newValue });
