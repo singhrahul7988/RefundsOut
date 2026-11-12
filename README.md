@@ -18,7 +18,7 @@ for approval before any money moves, and then sends each refund through PayPal e
 
 <br />
 
-<img src=".github/readme/home.png" alt="RefundsOut home page: start a refund run and how it works" width="900" />
+<img src=".github/readme/home.png" alt="RefundsOut home page: An event got cancelled. Leave the refund headache to us. Start a refund run, how it works, and built with PayPal, Gemini and AG Grid" width="900" />
 
 </div>
 
@@ -158,18 +158,7 @@ Code: [`src/ui/grid.ts`](src/ui/grid.ts) (setup, theme, chart theme, status bar,
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  A[Sales, scans, terms] -->|Gemini column mapping| B[Import]
-  B --> C[Policy<br/>Gemini compile + tests]
-  C --> D[Plan builder<br/>rules engine, integer cents]
-  P[(PayPal sandbox)] -->|re-check captures| D
-  D --> E[Review<br/>AG Grid + 5 checks]
-  E -->|approved plan hash| F[Runner<br/>Postgres queue]
-  F -->|refund / dispute offer<br/>fixed request ID| P
-  F --> G[Reconcile<br/>ledger, letters, CSV]
-  P -->|refund status, Transaction Search| G
-```
+<img src=".github/readme/architecture.png" alt="RefundsOut architecture: organiser uploads flow through Import, Policy, Review, Run and Reconcile; Gemini, AG Grid, PayPal REST APIs and PostgreSQL are marked on each stage, with the PayPal endpoints and Postgres tables listed below" width="100%" />
 
 **Stack:** Next.js 16 (App Router, Server Actions) · React 19 · TypeScript · Tailwind CSS 4 · PostgreSQL (`pg`) · Zod ·
 Google Gen AI SDK · AG Grid Enterprise 36 + AG Charts Enterprise 14 · Vitest.
