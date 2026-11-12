@@ -15,6 +15,9 @@ const STATUS: Record<string, { label: string; cls: string; next: string; cta: st
   done: { label: "Done", cls: "bg-[#DDF1E7] text-[#145C3D]", next: "reconcile", cta: "See reconciliation" },
 };
 
+/** Entrance delay for .ro-rise / .ro-draw (see globals.css). */
+const delay = (ms: number) => ({ "--d": `${ms}ms` }) as React.CSSProperties;
+
 const STEPS = [
   { t: "Upload", d: "Your ticket sales, gate scans and ticket terms, in any layout.", icon: <IconImport />, tone: "bg-accent-soft text-accent" },
   { t: "Check", d: "Read the rules made from your terms, and every buyer's refund.", icon: <IconReview />, tone: "bg-ai-soft text-ai" },
@@ -55,15 +58,15 @@ export default async function Home() {
 
         <main className="flex flex-col gap-12 pb-16 pt-10 md:pt-14">
           <section className="flex flex-col gap-5">
-            <h1 className="max-w-[980px] text-[34px] font-bold leading-[40px] tracking-[-0.8px] text-balance sm:text-[44px] sm:leading-[50px] lg:text-[52px] lg:leading-[58px]">
-              A day was cancelled.<br className="hidden sm:block" /> Refund everyone exactly right, once.
+            <h1 className="ro-rise max-w-[980px] text-[34px] font-bold leading-[40px] tracking-[-0.8px] text-balance sm:text-[44px] sm:leading-[50px] lg:text-[52px] lg:leading-[58px]">
+              An event got cancelled.<br className="hidden sm:block" /> Leave the refund headache to us.
             </h1>
-            <p className="max-w-[640px] text-[17px] leading-[27px] text-muted">
-              Upload your ticket sales and terms. RefundsOut works out what every buyer is owed, you approve it, and PayPal sends each refund once.
+            <p className="ro-rise max-w-[640px] text-[17px] leading-[27px] text-muted" style={delay(120)}>
+              Upload your ticket sales and terms. RefundsOut works out what every buyer is owed, checks each payment with PayPal, and sends the refunds once you approve.
             </p>
             <ul className="flex flex-wrap gap-2">
-              {["Every refund sent once", "Checked against PayPal", "Two people approve big runs"].map((t) => (
-                <li key={t} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 font-medium">
+              {["Every refund sent once", "Checked against PayPal", "Two people approve big runs"].map((t, i) => (
+                <li key={t} style={delay(240 + i * 80)} className="ro-rise inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 font-medium">
                   <IconCheckCircle className="text-ok" />{t}
                 </li>
               ))}
@@ -71,17 +74,18 @@ export default async function Home() {
           </section>
 
           <section className="grid items-stretch gap-5 md:grid-cols-2">
-            <HomeForm />
-            <div className="flex flex-col gap-5 rounded-[14px] border border-line bg-white p-6 shadow-[0_1px_3px_rgba(16,24,40,0.05)]">
+            <div className="ro-rise grid" style={delay(420)}><HomeForm /></div>
+            <div className="ro-rise flex flex-col gap-5 rounded-[14px] border border-line bg-white p-6 shadow-[0_1px_3px_rgba(16,24,40,0.05)]" style={delay(500)}>
               <div className="flex flex-col gap-1">
                 <b className="text-[18px]">How it works</b>
                 <span className="text-muted">Nothing is sent until you&apos;ve seen every refund.</span>
               </div>
               <ol className="flex flex-1 flex-col">
                 {STEPS.map((s, i) => (
-                  <li key={s.t} className="relative flex gap-4 pb-7 last:pb-0">
-                    {i < STEPS.length - 1 && <span aria-hidden className="absolute bottom-0 left-[19px] top-11 w-px bg-line" />}
-                    <span className={`flex size-10 flex-none items-center justify-center rounded-[10px] ${s.tone}`}>{s.icon}</span>
+                  // Steps land one after another, the connector draws down to the next, then a ring loops 1 → 2 → 3.
+                  <li key={s.t} className="ro-rise relative flex gap-4 pb-7 last:pb-0" style={delay(800 + i * 450)}>
+                    {i < STEPS.length - 1 && <span aria-hidden className="ro-draw absolute bottom-0 left-[19px] top-11 w-px bg-line" style={delay(1050 + i * 450)} />}
+                    <span className={`ro-ping flex size-10 flex-none items-center justify-center rounded-[10px] ${s.tone}`} style={{ "--p": `${2400 + i * 2000}ms` } as React.CSSProperties}>{s.icon}</span>
                     <span className="flex min-w-0 flex-col gap-0.5 pt-0.5">
                       <b className="text-[15px]">{i + 1}. {s.t}</b>
                       <span className="text-muted">{s.d}</span>

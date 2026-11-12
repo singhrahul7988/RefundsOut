@@ -125,6 +125,44 @@ body {
   .ro-pulse { animation: none; }
 }
 
+/* Home page: staggered entrance (delay from --d), the step connector drawing down, and a ring that
+   travels 1 → 2 → 3 over the "How it works" icons (each icon's turn set by --p, 6s cycle). */
+@keyframes ro-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+.ro-rise {
+  animation: ro-rise 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes ro-draw {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.ro-draw {
+  transform-origin: top;
+  animation: ro-draw 450ms ease-out both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes ro-ping {
+  0% { opacity: 0.55; transform: scale(1); }
+  22%, 100% { opacity: 0; transform: scale(1.5); }
+}
+.ro-ping { position: relative; }
+.ro-ping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid currentColor;
+  opacity: 0;
+  animation: ro-ping 6s ease-out infinite;
+  animation-delay: var(--p, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ro-rise, .ro-draw, .ro-ping::after { animation: none; }
+}
+
 /* AG Grid row/cell states */
 .ro-edited { background: #fff4de !important; }
 .ro-pinned { background: #fffbf2 !important; }
