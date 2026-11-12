@@ -31,7 +31,7 @@ export function sampleColumnMapping(headers: string[]): ColumnMapping | null {
 }
 
 /** The sample terms compile to the fixture policy; only usable when the ticket-type names match it. */
-export function samplePolicy(terms: string, tiers: string[]): Policy | null {
+export function samplePolicy(terms: string, tiers: string[], answers: { question: string; answer: string }[] = []): Policy | null {
   if (!terms.includes("RIVERSIDE SOUND FESTIVAL 2026")) return null;
   // Gemini may have named the ticket types differently from the fixture ("3-Day General Admission Pass"), so map by meaning.
   const classify = (t: string) => (/camp/i.test(t) ? "Camping add-on" : /vip/i.test(t) ? "VIP 3-Day" : /\b(3|three)[\s-]*day/i.test(t) ? "3-Day Pass" : /sat|single|one[\s-]*day|\bday pass/i.test(t) ? "Saturday Day Pass" : null);
@@ -46,6 +46,13 @@ export function samplePolicy(terms: string, tiers: string[]): Policy | null {
   for (const r of policy.rules) r.when.tiers = sub(r.when.tiers);
   for (const d of policy.deductions) d.tiers = sub(d.tiers);
   for (const x of policy.tests) x.tier = rename.get(x.tier) ?? x.tier;
+  // The fixture defaults to "hospitality stays non-refundable" for a VIP who never came. If the organizer
+  // already answered the other way, follow them: drop the deduction from the never-attended rule.
+  const vip = answers.find((a) => /vip/i.test(a.question));
+  if (vip && /449|refunded too|7\.3 wins/i.test(vip.answer)) {
+    for (const d of policy.deductions) d.appliesToRules = d.appliesToRules.filter((r) => r !== "R3");
+    for (const x of policy.tests) if (/vip/i.test(x.tier) && x.attendedDays.length === 0 && x.expectedCents) x.expectedCents = x.priceCents;
+  }
   // The fixture's rules already encode the default answer to its one question, so the fallback never asks it:
   // a judge whose Gemini call failed must not get stuck behind a question that can't be re-answered consistently.
   return { ...policy, questions: [] };

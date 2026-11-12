@@ -229,7 +229,7 @@ export async function compileEventPolicy(eventId: string, actor: string) {
   try {
     ({ policy, checks, model } = await compilePolicy({ terms, notice, tiers, organizerAnswers: answered as { question: string; answer: string }[] }));
   } catch (err) {
-    const fallback = samplePolicy(terms, tiers.map((t) => t.tier));
+    const fallback = samplePolicy(terms, tiers.map((t) => t.tier), answered as { question: string; answer: string }[]);
     if (!fallback) throw new Error(`Gemini couldn't compile the terms right now (${(err as Error).message}). Try again in a moment.`);
     console.warn("[refundsout] Gemini unavailable; using the verified sample policy");
     policy = fallback;

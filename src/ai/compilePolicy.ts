@@ -38,18 +38,32 @@ export async function compilePolicy(args: {
     );
   }
 
+  // A person is waiting on this screen. A normal compile takes ~20s; when Gemini is busy the retries
+  // used to stack up for minutes. Past the budget we stop, and the caller shows the best result or a fallback.
+  // 90s = one full 45s try on the main model plus one on the backup.
+  const deadline = Date.now() + Number(process.env.POLICY_COMPILE_BUDGET_MS ?? 90_000);
+  let best: CompileResult | null = null;
   let lastChecks: PolicyCheck[] = [];
   let feedback = "";
   for (let round = 1; round <= 3; round++) {
-    const { data, model, attempts } = await generateJson({
-      system: SYSTEM,
-      schema: Policy,
-      models: ACCURATE_MODELS, // the one AI step that must be right
-      parts: feedback ? [...parts, feedback] : parts,
-    });
+    let result;
+    try {
+      result = await generateJson({
+        system: SYSTEM,
+        schema: Policy,
+        models: ACCURATE_MODELS, // the one AI step that must be right
+        parts: feedback ? [...parts, feedback] : parts,
+        deadline,
+      });
+    } catch (err) {
+      if (best) return best; // out of time on a fix-up round: show the last version, with its failing checks
+      throw err;
+    }
+    const { data, model, attempts } = result;
     const checks = verifyPolicy(data, args.terms, args.tiers.map((t) => t.tier));
     const hardFailures = checks.filter((c) => !c.passed); // a wrong self-written test case is fed back too, so the model fixes it
-    if (hardFailures.length === 0 || round === 3) return { policy: data, checks, model, attempts };
+    best = { policy: data, checks, model, attempts };
+    if (hardFailures.length === 0 || round === 3) return best;
     lastChecks = checks;
     feedback =
       "Your previous policy failed these checks; fix them:\n" +

@@ -8,8 +8,12 @@ import { z } from "zod";
 const list = (env: string | undefined, fallback: string) => (env ?? fallback).split(",").map((m) => m.trim()).filter(Boolean);
 /** Simple, fast jobs (column mapping, letter wording, "Ask the grid"): the least crowded model first. */
 export const FAST_MODELS = list(process.env.GEMINI_FAST_MODELS, "gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.8-flash");
-/** The policy compile, which must be right: the model that passed every check in testing first, lite only as a last resort. */
-export const ACCURATE_MODELS = list(process.env.GEMINI_ACCURATE_MODELS, "gemini-3.5-flash,gemini-3.8-flash,gemini-3.1-flash-lite");
+/**
+ * The policy compile, which must be right: the model that passed every check in testing first.
+ * Measured Nov 12: 3.5-flash ~20s (all checks pass), 3.1-flash-lite ~37s (a failed check gets fed back),
+ * 3.8-flash >120s (timed out), so 3.8 goes last and in practice is never reached within the compile budget.
+ */
+export const ACCURATE_MODELS = list(process.env.GEMINI_ACCURATE_MODELS, "gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.8-flash");
 const CALL_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS ?? 45_000);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isBusy = (err: unknown) =>
@@ -35,6 +39,8 @@ export async function generateJson<T>(opts: {
   schema: z.ZodType<T>;
   models?: string[];
   maxAttempts?: number;
+  /** Epoch ms. No new attempt starts after this, and each call is cut short to fit before it. */
+  deadline?: number;
 }): Promise<JsonCallResult<T>> {
   const models = opts.models?.length ? opts.models : FAST_MODELS;
   const jsonSchema = z.toJSONSchema(opts.schema, { target: "draft-7", io: "input" }) as Record<string, unknown>;
@@ -45,6 +51,12 @@ export async function generateJson<T>(opts: {
 
   let modelIdx = 0;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const left = opts.deadline ? opts.deadline - Date.now() : CALL_TIMEOUT_MS;
+    if (left < 12_000) { // Gemini rejects request deadlines under ~10s, and a policy can't come back that fast anyway
+      lastError ??= new Error("Gemini ran out of time");
+      break;
+    }
+    const callTimeout = Math.min(CALL_TIMEOUT_MS, left);
     const model = models[modelIdx % models.length];
     const parts: Part[] = opts.parts.map((p) => (typeof p === "string" ? { text: p } : p));
     if (feedback) parts.push({ text: `Your previous answer was rejected: ${feedback}\nReturn corrected JSON only.` });
@@ -57,7 +69,8 @@ export async function generateJson<T>(opts: {
           temperature: 0,
           responseMimeType: "application/json",
           responseJsonSchema: jsonSchema,
-          abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+          abortSignal: AbortSignal.timeout(callTimeout),
+          httpOptions: { timeout: callTimeout },
         },
       });
       const text = res.text ?? "";
@@ -70,7 +83,7 @@ export async function generateJson<T>(opts: {
       feedback = err instanceof SyntaxError ? "the response was not valid JSON" : null;
       if (isBusy(err)) {
         modelIdx++; // move to the next model while this one is overloaded
-        await sleep(Math.min(10_000, 1500 * 2 ** (attempt - 1)));
+        await sleep(Math.min(10_000, 1500 * 2 ** (attempt - 1), opts.deadline ? Math.max(0, opts.deadline - Date.now()) : Infinity));
       }
     }
   }
